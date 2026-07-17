@@ -36,7 +36,7 @@ function ConvertLeadModal({ lead, onClose, onSuccess }: { lead: Lead; onClose: (
 
   const onSubmit = async (data: Record<string, unknown>) => {
     try {
-      await api.patch(`/leads/${lead.id}/convert`, data);
+      await api.post(`/leads/${lead.id}/convert`, data);
       toast.success(`${lead.firstName} ${lead.lastName} converted to Customer! 🎉`);
       onSuccess();
       onClose();
