@@ -1,8 +1,10 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Header from '@/components/layout/Header';
 import api from '@/lib/api';
+import AddFollowUpModal from '@/components/follow-ups/AddFollowUpModal';
 
 interface FollowUp {
   id: string;
@@ -31,6 +33,9 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 export default function FollowUpsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+
   const { data, isLoading } = useQuery({
     queryKey: ['follow-ups'],
     queryFn: () => api.get('/follow-ups').then(r => r.data),
@@ -56,9 +61,17 @@ export default function FollowUpsPage() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: 'Inter, sans-serif' }}>
       <Header title="Follow-Ups" />
       <div style={{ padding: '20px 24px' }}>
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A', margin: 0 }}>Follow-Ups</h1>
-          <p style={{ color: '#64748B', margin: '4px 0 0', fontSize: 14 }}>Manage lead follow-ups and reminders</p>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A', margin: 0 }}>Follow-Ups</h1>
+            <p style={{ color: '#64748B', margin: '4px 0 0', fontSize: 14 }}>Manage lead follow-ups and reminders</p>
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            style={{ background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer', boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}
+          >
+            + Add Follow-up
+          </button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
@@ -126,6 +139,12 @@ export default function FollowUpsPage() {
           </table>
         </div>
       </div>
+      {isModalOpen && (
+        <AddFollowUpModal 
+          onClose={() => setIsModalOpen(false)} 
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['follow-ups'] })} 
+        />
+      )}
     </div>
   );
 }

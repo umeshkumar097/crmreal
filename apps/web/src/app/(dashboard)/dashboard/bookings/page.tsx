@@ -1,8 +1,10 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Header from '@/components/layout/Header';
 import api from '@/lib/api';
+import AddBookingModal from '@/components/bookings/AddBookingModal';
 
 interface Booking {
   id: string;
@@ -23,6 +25,9 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 export default function BookingsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+
   const { data, isLoading } = useQuery({
     queryKey: ['bookings'],
     queryFn: () => api.get('/bookings').then(r => r.data),
@@ -51,9 +56,17 @@ export default function BookingsPage() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: 'Inter, sans-serif' }}>
       <Header title="Bookings" />
       <div style={{ padding: '20px 24px' }}>
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A', margin: 0 }}>Bookings</h1>
-          <p style={{ color: '#64748B', margin: '4px 0 0', fontSize: 14 }}>Track and manage property bookings</p>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A', margin: 0 }}>Bookings</h1>
+            <p style={{ color: '#64748B', margin: '4px 0 0', fontSize: 14 }}>Track and manage property bookings</p>
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            style={{ background: '#10B981', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer', boxShadow: '0 2px 4px rgba(16,185,129,0.3)' }}
+          >
+            + Add Booking
+          </button>
         </div>
 
         {/* Stats */}
@@ -120,6 +133,12 @@ export default function BookingsPage() {
           </table>
         </div>
       </div>
+      {isModalOpen && (
+        <AddBookingModal 
+          onClose={() => setIsModalOpen(false)} 
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['bookings'] })} 
+        />
+      )}
     </div>
   );
 }
