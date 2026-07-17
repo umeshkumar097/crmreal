@@ -99,7 +99,7 @@ export class LeadsController {
   }
 
   @Post(':id/convert')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AGENT')
   @ApiOperation({ summary: 'Convert lead to customer' })
   convertToCustomer(
     @Param('id') id: string,
