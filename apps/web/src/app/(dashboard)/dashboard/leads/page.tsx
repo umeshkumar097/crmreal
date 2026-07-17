@@ -459,8 +459,8 @@ export default function LeadsPage() {
 
         {/* Table View */}
         {view === 'table' && (
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: 1200, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                   {['Lead', 'Contact', 'Budget', 'Source', 'Status', 'Priority', 'Stage', 'Created', 'Actions'].map(h => (
@@ -486,7 +486,7 @@ export default function LeadsPage() {
                   <tr key={lead.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                    <td style={{ padding: '12px 16px' }}>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                       <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.875rem' }}>
                         {lead.firstName} {lead.lastName}
                         {lead.isHot && <span style={{ marginLeft: 6, fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>🔥 HOT</span>}
