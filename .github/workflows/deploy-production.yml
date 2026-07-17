@@ -1,0 +1,53 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Run DB Migrations
+        run: |
+          kubectl exec -n crm-production deployment/crm-api -- \
+            npx prisma migrate deploy
+
+      - name: Deploy to production
+        run: |
+          kubectl set image deployment/crm-api \
+            api=${{ secrets.ACR_LOGIN_SERVER }}/crm-api:${{ github.event.release.tag_name }} \
+            -n crm-production
+          kubectl set image deployment/crm-web \
+            web=${{ secrets.ACR_LOGIN_SERVER }}/crm-web:${{ github.event.release.tag_name }} \
+            -n crm-production
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/crm-api -n crm-production --timeout=5m
+          kubectl rollout status deployment/crm-web -n crm-production --timeout=5m
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://api.yourcrm.com/api/v1/health || exit 1
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Production deployment failed! Manual rollback required."

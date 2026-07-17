@@ -1,0 +1,902 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id               String             @id @default(uuid())
+  name             String
+  slug             String             @unique
+  domain           String?            @unique
+  logo             String?
+  plan             PlanType           @default(STARTER)
+  isActive         Boolean            @default(true)
+  trialEndsAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+  activities       ActivityTimeline[]
+  auditLogs        AuditLog[]
+  bookings         Booking[]
+  builders         Builder[]
+  campaigns        Campaign[]
+  channelPartners  ChannelPartner[]
+  customers        Customer[]
+  documents        Document[]
+  employees        Employee[]
+  featureFlags     FeatureFlag[]
+  followUps        FollowUp[]
+  leads            Lead[]
+  notifications    Notification[]
+  payments         Payment[]
+  properties       Property[]
+  tasks            Task[]
+  settings         TenantSettings?
+  users            User[]
+  whatsappMessages WhatsAppMessage[]
+  whatsappSessions WhatsAppSession[]
+
+  @@map("tenants")
+}
+
+model User {
+  id               String             @id @default(uuid())
+  tenantId         String
+  email            String
+  phone            String?
+  passwordHash     String
+  firstName        String
+  lastName         String
+  role             UserRole           @default(AGENT)
+  avatar           String?
+  isActive         Boolean            @default(true)
+  emailVerified    Boolean            @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+  activities       ActivityTimeline[]
+  auditLogs        AuditLog[]
+  employee         Employee?
+  assignedLeads    Lead[]             @relation("AssignedLeads")
+  createdLeads     Lead[]             @relation("CreatedBy")
+  notifications    Notification[]
+  verifiedPayments Payment[]          @relation("VerifiedPayments")
+  refreshTokens    RefreshToken[]
+  tasks            Task[]             @relation("AssignedTasks")
+  createdTasks     Task[]             @relation("CreatedTasks")
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  whatsappSessions WhatsAppSession[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, role])
+  @@index([tenantId, isActive])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tenantId   String
+  tokenHash  String    @unique
+  deviceInfo String?
+  ipAddress  String?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Lead {
+  id               String            @id @default(uuid())
+  tenantId         String
+  leadNumber       String
+  assignedToId     String?
+  createdById      String
+  channelPartnerId String?
+  campaignId       String?
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String
+  whatsapp         String?
+  source           LeadSource        @default(WEBSITE)
+  status           LeadStatus        @default(NEW)
+  stage            PipelineStage     @default(INQUIRY)
+  priority         Priority          @default(MEDIUM)
+  budgetMin        Decimal?          @db.Decimal(15, 2)
+  budgetMax        Decimal?          @db.Decimal(15, 2)
+  preferredBHK     String[]
+  preferredArea    String[]
+  preferredCity    String?
+  notes            String?
+  tags             String[]
+  score            Int               @default(0)
+  isHot            Boolean           @default(false)
+  lostReason       String?
+  lastContactedAt  DateTime?
+  nextFollowUpAt   DateTime?
+  convertedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+  bookings         Booking[]         @relation("LeadBookings")
+  customer         Customer?
+  documents        Document[]
+  followUps        FollowUp[]
+  assignedTo       User?             @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  campaign         Campaign?         @relation(fields: [campaignId], references: [id])
+  channelPartner   ChannelPartner?   @relation(fields: [channelPartnerId], references: [id])
+  createdBy        User              @relation("CreatedBy", fields: [createdById], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  whatsappMessages WhatsAppMessage[]
+
+  @@unique([tenantId, leadNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, stage])
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, source])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, phone])
+  @@index([tenantId, isHot])
+  @@map("leads")
+}
+
+model Customer {
+  id                 String            @id @default(uuid())
+  tenantId           String
+  leadId             String            @unique
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String
+  whatsapp           String?
+  panNumber          String?
+  aadharNumber       String?
+  address            Json?
+  isPortalUser       Boolean           @default(false)
+  portalPasswordHash String?
+  portalLastLoginAt  DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+  bookings           Booking[]
+  lead               Lead              @relation(fields: [leadId], references: [id])
+  tenant             Tenant            @relation(fields: [tenantId], references: [id])
+  documents          Document[]
+  loans              LoanApplication[]
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@map("customers")
+}
+
+model Builder {
+  id         String     @id @default(uuid())
+  tenantId   String
+  name       String
+  email      String?
+  phone      String?
+  reraNumber String?
+  logo       String?
+  website    String?
+  address    String?
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  properties Property[]
+
+  @@index([tenantId])
+  @@map("builders")
+}
+
+model Property {
+  id             String         @id @default(uuid())
+  tenantId       String
+  builderId      String?
+  name           String
+  type           PropertyType
+  status         PropertyStatus @default(UPCOMING)
+  reraNumber     String?
+  totalUnits     Int            @default(0)
+  launchDate     DateTime?
+  completionDate DateTime?
+  brochureUrl    String?
+  images         String[]
+  amenities      String[]
+  description    String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String
+  state          String
+  pincode        String?
+  latitude       Decimal?       @db.Decimal(10, 8)
+  longitude      Decimal?       @db.Decimal(11, 8)
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  builder        Builder?       @relation(fields: [builderId], references: [id])
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  unitTypes      UnitType[]
+  units          Unit[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+  @@index([tenantId, city])
+  @@map("properties")
+}
+
+model UnitType {
+  id           String   @id @default(uuid())
+  tenantId     String
+  propertyId   String
+  name         String
+  bedrooms     Int
+  bathrooms    Int
+  builtUpArea  Decimal  @db.Decimal(10, 2)
+  carpetArea   Decimal  @db.Decimal(10, 2)
+  basePrice    Decimal  @db.Decimal(15, 2)
+  floorPlanUrl String?
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  property     Property @relation(fields: [propertyId], references: [id])
+  units        Unit[]
+
+  @@index([tenantId, propertyId])
+  @@map("unit_types")
+}
+
+model Unit {
+  id            String     @id @default(uuid())
+  tenantId      String
+  propertyId    String
+  unitTypeId    String
+  unitNumber    String
+  floor         Int
+  tower         String?
+  facing        String?
+  builtUpArea   Decimal    @db.Decimal(10, 2)
+  carpetArea    Decimal    @db.Decimal(10, 2)
+  basePrice     Decimal    @db.Decimal(15, 2)
+  currentPrice  Decimal    @db.Decimal(15, 2)
+  status        UnitStatus @default(AVAILABLE)
+  holdExpiresAt DateTime?
+  holdReason    String?
+  holdById      String?
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  booking       Booking?
+  property      Property   @relation(fields: [propertyId], references: [id])
+  unitType      UnitType   @relation(fields: [unitTypeId], references: [id])
+
+  @@unique([propertyId, unitNumber])
+  @@index([tenantId])
+  @@index([tenantId, propertyId])
+  @@index([tenantId, status])
+  @@index([tenantId, propertyId, status])
+  @@map("units")
+}
+
+model Booking {
+  id              String               @id @default(uuid())
+  tenantId        String
+  bookingNumber   String
+  unitId          String               @unique
+  customerId      String
+  leadId          String?
+  assignedToId    String
+  bookingDate     DateTime
+  agreementValue  Decimal              @db.Decimal(15, 2)
+  bookingAmount   Decimal              @db.Decimal(15, 2)
+  stampDuty       Decimal?             @db.Decimal(15, 2)
+  registrationFee Decimal?             @db.Decimal(15, 2)
+  otherCharges    Decimal?             @db.Decimal(15, 2)
+  totalAmount     Decimal              @db.Decimal(15, 2)
+  totalPaid       Decimal              @default(0) @db.Decimal(15, 2)
+  totalPending    Decimal              @default(0) @db.Decimal(15, 2)
+  status          BookingStatus        @default(PENDING)
+  cancelledAt     DateTime?
+  cancelledReason String?
+  registeredAt    DateTime?
+  notes           String?
+  createdById     String
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
+  installments    BookingInstallment[]
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  lead            Lead?                @relation("LeadBookings", fields: [leadId], references: [id])
+  tenant          Tenant               @relation(fields: [tenantId], references: [id])
+  unit            Unit                 @relation(fields: [unitId], references: [id])
+  commission      Commission?
+  documents       Document[]
+  loan            LoanApplication?
+  payments        Payment[]
+
+  @@unique([tenantId, bookingNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([tenantId, createdAt])
+  @@map("bookings")
+}
+
+model BookingInstallment {
+  id          String    @id @default(uuid())
+  tenantId    String
+  bookingId   String
+  milestone   String
+  description String?
+  amount      Decimal   @db.Decimal(15, 2)
+  dueDate     DateTime
+  isPaid      Boolean   @default(false)
+  paidAt      DateTime?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  booking     Booking   @relation(fields: [bookingId], references: [id])
+  payments    Payment[]
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, dueDate, isPaid])
+  @@map("booking_installments")
+}
+
+model Payment {
+  id             String              @id @default(uuid())
+  tenantId       String
+  bookingId      String
+  installmentId  String?
+  amount         Decimal             @db.Decimal(15, 2)
+  mode           PaymentMode
+  referenceNo    String?
+  chequeNo       String?
+  bankName       String?
+  paidAt         DateTime
+  status         PaymentStatus       @default(PENDING)
+  verifiedById   String?
+  verifiedAt     DateTime?
+  rejectedReason String?
+  receiptUrl     String?
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  booking        Booking             @relation(fields: [bookingId], references: [id])
+  installment    BookingInstallment? @relation(fields: [installmentId], references: [id])
+  tenant         Tenant              @relation(fields: [tenantId], references: [id])
+  verifiedBy     User?               @relation("VerifiedPayments", fields: [verifiedById], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, bookingId])
+  @@index([tenantId, status])
+  @@index([tenantId, paidAt])
+  @@map("payments")
+}
+
+model FollowUp {
+  id           String       @id @default(uuid())
+  tenantId     String
+  leadId       String
+  assignedToId String
+  type         ActivityType
+  scheduledAt  DateTime
+  notes        String?
+  isDone       Boolean      @default(false)
+  doneAt       DateTime?
+  outcome      String?
+  nextFollowUp DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  lead         Lead         @relation(fields: [leadId], references: [id])
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, assignedToId, scheduledAt])
+  @@index([tenantId, leadId])
+  @@index([tenantId, isDone, scheduledAt])
+  @@map("follow_ups")
+}
+
+model Task {
+  id           String    @id @default(uuid())
+  tenantId     String
+  title        String
+  description  String?
+  assignedToId String
+  createdById  String
+  relatedType  String?
+  relatedId    String?
+  dueDate      DateTime?
+  priority     Priority  @default(MEDIUM)
+  isDone       Boolean   @default(false)
+  doneAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  assignedTo   User      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  createdBy    User      @relation("CreatedTasks", fields: [createdById], references: [id])
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, isDone])
+  @@map("tasks")
+}
+
+model Document {
+  id           String    @id @default(uuid())
+  tenantId     String
+  name         String
+  type         String
+  url          String
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  leadId       String?
+  bookingId    String?
+  customerId   String?
+  uploadedById String
+  isVerified   Boolean   @default(false)
+  verifiedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  booking      Booking?  @relation(fields: [bookingId], references: [id])
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  lead         Lead?     @relation(fields: [leadId], references: [id])
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, leadId])
+  @@index([tenantId, bookingId])
+  @@index([tenantId, customerId])
+  @@map("documents")
+}
+
+model WhatsAppMessage {
+  id            String    @id @default(uuid())
+  tenantId      String
+  leadId        String?
+  direction     String
+  from          String
+  to            String
+  body          String?
+  type          String
+  status        String    @default("sent")
+  providerMsgId String
+  templateName  String?
+  mediaUrl      String?
+  errorMessage  String?
+  sentAt        DateTime  @default(now())
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  lead          Lead?     @relation(fields: [leadId], references: [id])
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, leadId])
+  @@index([tenantId, from])
+  @@index([tenantId, sentAt])
+  @@map("whatsapp_messages")
+}
+
+model Campaign {
+  id             String         @id @default(uuid())
+  tenantId       String
+  name           String
+  type           CampaignType
+  status         CampaignStatus @default(DRAFT)
+  description    String?
+  templateId     String?
+  templateName   String?
+  targetCount    Int            @default(0)
+  sentCount      Int            @default(0)
+  deliveredCount Int            @default(0)
+  readCount      Int            @default(0)
+  scheduledAt    DateTime?
+  completedAt    DateTime?
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  leads          Lead[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("campaigns")
+}
+
+model ChannelPartner {
+  id             String       @id @default(uuid())
+  tenantId       String
+  companyName    String
+  contactName    String
+  email          String
+  phone          String
+  whatsapp       String?
+  reraNumber     String?
+  commissionRate Decimal      @db.Decimal(5, 2)
+  city           String?
+  address        String?
+  bankDetails    Json?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  commissions    Commission[]
+  leads          Lead[]
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@map("channel_partners")
+}
+
+model Commission {
+  id               String           @id @default(uuid())
+  tenantId         String
+  bookingId        String           @unique
+  channelPartnerId String?
+  agentId          String?
+  amount           Decimal          @db.Decimal(15, 2)
+  percentage       Decimal          @db.Decimal(5, 2)
+  status           CommissionStatus @default(PENDING)
+  approvedAt       DateTime?
+  paidAt           DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  booking          Booking          @relation(fields: [bookingId], references: [id])
+  channelPartner   ChannelPartner?  @relation(fields: [channelPartnerId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("commissions")
+}
+
+model LoanApplication {
+  id               String    @id @default(uuid())
+  tenantId         String
+  customerId       String
+  bookingId        String    @unique
+  bankName         String
+  branchName       String?
+  loanAmount       Decimal   @db.Decimal(15, 2)
+  sanctionedAmount Decimal?  @db.Decimal(15, 2)
+  disbursedAmount  Decimal?  @db.Decimal(15, 2)
+  interestRate     Decimal?  @db.Decimal(5, 2)
+  tenure           Int?
+  status           String    @default("APPLIED")
+  appliedAt        DateTime  @default(now())
+  sanctionedAt     DateTime?
+  disbursedAt      DateTime?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  booking          Booking   @relation(fields: [bookingId], references: [id])
+  customer         Customer  @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, customerId])
+  @@map("loan_applications")
+}
+
+model Employee {
+  id             String    @id @default(uuid())
+  tenantId       String
+  userId         String    @unique
+  employeeCode   String
+  department     String?
+  designation    String?
+  reportingToId  String?
+  joiningDate    DateTime?
+  salary         Decimal?  @db.Decimal(12, 2)
+  targetLeads    Int       @default(0)
+  targetBookings Int       @default(0)
+  targetRevenue  Decimal?  @db.Decimal(15, 2)
+  bankDetails    Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  user           User      @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, employeeCode])
+  @@index([tenantId])
+  @@map("employees")
+}
+
+model ActivityTimeline {
+  id          String       @id @default(uuid())
+  tenantId    String
+  userId      String
+  type        ActivityType
+  title       String
+  description String?
+  entityType  String
+  entityId    String
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, userId])
+  @@index([tenantId, createdAt])
+  @@map("activity_timeline")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  link      String?
+  metadata  Json             @default("{}")
+  createdAt DateTime         @default(now())
+  tenant    Tenant           @relation(fields: [tenantId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId, isRead])
+  @@index([tenantId, userId, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  oldData    Json?
+  newData    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, userId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  key         String
+  isEnabled   Boolean  @default(false)
+  config      Json?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("feature_flags")
+}
+
+model TenantSettings {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  currency            String   @default("INR")
+  currencySymbol      String   @default("₹")
+  timezone            String   @default("Asia/Kolkata")
+  dateFormat          String   @default("DD/MM/YYYY")
+  fiscalYearStart     String   @default("04")
+  whatsappProvider    String   @default("meta")
+  storageProvider     String   @default("r2")
+  aiProvider          String   @default("openai")
+  emailProvider       String   @default("sendgrid")
+  leadNumberPrefix    String   @default("L")
+  bookingNumberPrefix String   @default("BK")
+  smtpConfig          Json?
+  brandColors         Json?
+  updatedAt           DateTime @updatedAt
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("tenant_settings")
+}
+
+model WhatsAppSession {
+  id           String    @id @default(uuid())
+  tenantId     String
+  userId       String
+  sessionName  String
+  status       String    @default("DISCONNECTED")
+  qrStatus     String    @default("PENDING")
+  qrCode       String?
+  phoneNumber  String?
+  displayName  String?
+  profilePic   String?
+  deviceModel  String?
+  connectedAt  DateTime?
+  lastSeen     DateTime?
+  lastActivity DateTime?
+  sessionData  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId])
+  @@map("whatsapp_sessions")
+}
+
+enum PlanType {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  AGENT
+  CHANNEL_PARTNER
+  CUSTOMER
+}
+
+enum LeadSource {
+  WEBSITE
+  REFERRAL
+  WALK_IN
+  SOCIAL_MEDIA
+  IVR
+  WHATSAPP
+  CP
+  CAMPAIGN
+  PORTAL
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  HOT
+  CONVERTED
+  LOST
+  JUNK
+}
+
+enum PipelineStage {
+  INQUIRY
+  INTERESTED
+  SITE_VISIT_SCHEDULED
+  SITE_VISITED
+  NEGOTIATION
+  BOOKING_DONE
+  CLOSED_LOST
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  PLOT
+  COMMERCIAL
+  STUDIO
+  PENTHOUSE
+  OFFICE
+  WAREHOUSE
+}
+
+enum PropertyStatus {
+  UPCOMING
+  LAUNCHED
+  UNDER_CONSTRUCTION
+  READY_TO_MOVE
+  SOLD_OUT
+  PAUSED
+}
+
+enum UnitStatus {
+  AVAILABLE
+  HOLD
+  BOOKED
+  SOLD
+  BLOCKED
+  CANCELLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  REGISTERED
+  COMPLETED
+}
+
+enum PaymentMode {
+  CASH
+  CHEQUE_DD
+  NEFT
+  RTGS
+  UPI
+  ONLINE_GATEWAY
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  WHATSAPP
+  SMS
+  NOTE
+  TASK
+  SITE_VISIT
+  STATUS_CHANGE
+  DOCUMENT
+  BOOKING
+  PAYMENT
+  SYSTEM
+}
+
+enum NotificationType {
+  LEAD_ASSIGNED
+  FOLLOW_UP_DUE
+  BOOKING_CONFIRMED
+  PAYMENT_RECEIVED
+  PAYMENT_DUE
+  TASK_ASSIGNED
+  TASK_DUE
+  DOCUMENT_UPLOADED
+  SYSTEM
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum CampaignType {
+  WHATSAPP
+  EMAIL
+  SMS
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
