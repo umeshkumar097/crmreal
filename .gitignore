@@ -50,3 +50,5 @@ prisma/migrations/*.sql.bak
 # Misc
 *.tsbuildinfo
 .cache/
+apps/api/whatsapp-sessions/
+node_modules/
