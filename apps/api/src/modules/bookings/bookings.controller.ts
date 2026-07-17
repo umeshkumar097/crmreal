@@ -27,14 +27,14 @@ export class BookingsController {
 
   @Post()
   create(
-    @Req() req: { user: { tenantId: string; sub: string } },
+    @Req() req: { user: { tenantId: string; userId: string } },
     @Body() dto: {
       unitId: string; customerId: string; leadId?: string; assignedToId: string;
       bookingDate: Date; agreementValue: number; bookingAmount: number;
       stampDuty?: number; registrationFee?: number; otherCharges?: number; notes?: string;
     },
   ) {
-    return this.service.create(req.user.tenantId, req.user.sub, dto);
+    return this.service.create(req.user.tenantId, req.user.userId, dto);
   }
 
   @Put(':id/status')

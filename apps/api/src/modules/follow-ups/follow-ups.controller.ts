@@ -27,13 +27,13 @@ export class FollowUpsController {
 
   @Post()
   create(
-    @Req() req: { user: { tenantId: string; sub: string } },
+    @Req() req: { user: { tenantId: string; userId: string } },
     @Body() dto: {
       leadId: string; assignedToId?: string;
       type: string; scheduledAt: Date; notes?: string;
     },
   ) {
-    return this.service.create(req.user.tenantId, req.user.sub, dto);
+    return this.service.create(req.user.tenantId, req.user.userId, dto);
   }
 
   @Put(':id/done')
