@@ -158,6 +158,7 @@ export class LeadsController {
   async importLeads(
     @CurrentUser() user: { userId: string; tenantId: string },
     @UploadedFile() file: Express.Multer.File,
+    @Body('mapping') mapping?: string,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.leadsService.importLeads(
@@ -165,6 +166,7 @@ export class LeadsController {
       user.userId,
       file.buffer,
       file.mimetype,
+      mapping,
     );
   }
 

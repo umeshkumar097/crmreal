@@ -13,7 +13,7 @@ interface ImportResult {
   errors: Array<{ row: number; reason: string; data: Record<string, unknown> }>;
 }
 
-type Step = 'upload' | 'preview' | 'importing' | 'result';
+type Step = 'upload' | 'mapping' | 'preview' | 'importing' | 'result';
 
 interface PreviewRow {
   firstName: string; lastName: string; phone: string; email?: string;
@@ -21,7 +21,7 @@ interface PreviewRow {
   [key: string]: string | undefined;
 }
 
-// ─── Column header aliases (client-side preview normalisation) ────────────────
+// ─── Column header aliases (auto-mapping) ──────────────────────────────────
 const ALIAS: Record<string, string> = {
   'first name': 'firstName', 'firstname': 'firstName', 'name': 'firstName',
   'last name': 'lastName', 'lastname': 'lastName', 'surname': 'lastName',
@@ -32,16 +32,6 @@ const ALIAS: Record<string, string> = {
   'pipeline stage': 'stage', 'lead stage': 'stage', 'status': 'stage',
   'remarks': 'notes', 'comment': 'notes',
 };
-
-function normaliseRow(raw: Record<string, unknown>): PreviewRow {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    const key = k.trim().toLowerCase();
-    const mapped = ALIAS[key] ?? key;
-    out[mapped] = String(v ?? '').trim();
-  }
-  return out as unknown as PreviewRow;
-}
 
 // ─── Download template (pure client-side XLSX) ────────────────────────────────
 function downloadTemplate() {
@@ -57,7 +47,6 @@ function downloadTemplate() {
      'REFERRAL', 'MEDIUM', 'INQUIRY', 'VILLA', '10000000', '15000000', 'Whitefield', 'Bangalore', 'Looking for gated community villa'],
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
-  // Style header row width
   ws['!cols'] = headers.map(() => ({ wch: 18 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Leads');
@@ -75,6 +64,11 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  
+  const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
+  const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({}); // { "Excel Header": "crmField" }
+  
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -82,7 +76,7 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
   const [errorTab, setErrorTab] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ─── Parse file client-side for preview ─────────────────────────────────────
+  // ─── Parse file client-side for mapping ─────────────────────────────────────
   const parseFile = useCallback((f: File) => {
     setFile(f);
     const reader = new FileReader();
@@ -91,9 +85,24 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
       const wb = XLSX.read(buffer, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '', raw: false });
+      const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+      
       setTotalRows(rows.length);
-      setPreview(rows.slice(0, 5).map(normaliseRow));
-      setStep('preview');
+      setRawRows(rows);
+      setRawHeaders(headers);
+      
+      // Auto-map based on ALIAS
+      const initialMap: Record<string, string> = {};
+      headers.forEach(h => {
+        const key = h.trim().toLowerCase();
+        const mapped = ALIAS[key] ?? key;
+        // If it's a known CRM field, map it
+        if (['firstName', 'lastName', 'phone', 'email', 'whatsapp', 'source', 'priority', 'stage', 'propertyType', 'budgetMin', 'budgetMax', 'locationPreference', 'preferredCity', 'notes'].includes(mapped)) {
+          initialMap[h] = mapped;
+        }
+      });
+      setMapping(initialMap);
+      setStep('mapping');
     };
     reader.readAsArrayBuffer(f);
   }, []);
@@ -110,13 +119,26 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
     if (picked) parseFile(picked);
   };
 
+  const goToPreview = () => {
+    // Generate preview using mapping
+    const mappedPreview = rawRows.slice(0, 5).map(raw => {
+      const out: Record<string, string> = {};
+      Object.entries(raw).forEach(([k, v]) => {
+        const mappedKey = mapping[k];
+        if (mappedKey) out[mappedKey] = String(v ?? '').trim();
+      });
+      return out as unknown as PreviewRow;
+    });
+    setPreview(mappedPreview);
+    setStep('preview');
+  };
+
   // ─── Upload to API ────────────────────────────────────────────────────────────
   const handleImport = async () => {
     if (!file) return;
     setStep('importing');
     setProgress(0);
 
-    // Simulate progress animation
     const interval = setInterval(() => {
       setProgress((p) => Math.min(p + Math.random() * 8, 90));
     }, 300);
@@ -124,6 +146,8 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('mapping', JSON.stringify(mapping));
+      
       const res = await api.post('/leads/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -160,19 +184,16 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
   // ─── Step: Upload ─────────────────────────────────────────────────────────────
   const renderUpload = () => (
     <>
-      {/* Info strip */}
       <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ fontSize: 18 }}>ℹ️</span>
         <div>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#1d4ed8', marginBottom: 3 }}>Supported formats: .xlsx, .xls, .csv</p>
           <p style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.6 }}>
-            Required columns: <strong>firstName</strong>, <strong>lastName</strong>, <strong>phone</strong>.
-            Download our template to get started instantly.
+            You can upload any file. In the next step, you will be able to map your columns to our system fields. Unmapped columns will be ignored.
           </p>
         </div>
       </div>
 
-      {/* Drop zone */}
       <div
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -195,39 +216,77 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
         </div>
         <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFile} />
       </div>
-
-      {/* Column guide */}
-      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 12 }}>📋 Template Column Reference</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {[
-            { col: 'firstName', req: true, desc: 'First name (required)' },
-            { col: 'lastName', req: true, desc: 'Last name (required)' },
-            { col: 'phone', req: true, desc: '10-digit mobile (required)' },
-            { col: 'email', req: false, desc: 'Email address' },
-            { col: 'source', req: false, desc: 'PORTAL, REFERRAL, etc.' },
-            { col: 'priority', req: false, desc: 'LOW / MEDIUM / HIGH' },
-            { col: 'stage', req: false, desc: 'INQUIRY, INTERESTED…' },
-            { col: 'budgetMin', req: false, desc: 'Min budget (₹)' },
-            { col: 'budgetMax', req: false, desc: 'Max budget (₹)' },
-            { col: 'propertyType', req: false, desc: 'APARTMENT / VILLA…' },
-            { col: 'preferredCity', req: false, desc: 'City preference' },
-            { col: 'notes', req: false, desc: 'Additional notes' },
-          ].map((item) => (
-            <div key={item.col} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              {item.req
-                ? <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 700, marginTop: 1, flexShrink: 0 }}>*</span>
-                : <span style={{ color: '#94a3b8', fontSize: 12, marginTop: 1, flexShrink: 0 }}>○</span>}
-              <div>
-                <code style={{ fontSize: 11, background: '#e2e8f0', padding: '1px 6px', borderRadius: 4, color: '#0f172a' }}>{item.col}</code>
-                <p style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </>
   );
+
+  // ─── Step: Mapping ────────────────────────────────────────────────────────────
+  const renderMapping = () => {
+    const crmFields = [
+      { key: 'firstName', label: 'First Name', req: true },
+      { key: 'lastName', label: 'Last Name', req: true },
+      { key: 'phone', label: 'Phone Number', req: true },
+      { key: 'email', label: 'Email Address' },
+      { key: 'whatsapp', label: 'WhatsApp Number' },
+      { key: 'source', label: 'Lead Source' },
+      { key: 'priority', label: 'Priority' },
+      { key: 'stage', label: 'Pipeline Stage' },
+      { key: 'budgetMin', label: 'Min Budget' },
+      { key: 'budgetMax', label: 'Max Budget' },
+      { key: 'propertyType', label: 'Property Type' },
+      { key: 'preferredCity', label: 'Preferred City' },
+      { key: 'notes', label: 'Notes' },
+    ];
+
+    const handleMap = (crmFieldKey: string, excelCol: string) => {
+      setMapping(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(k => { if (next[k] === crmFieldKey) delete next[k]; });
+        if (excelCol) next[excelCol] = crmFieldKey;
+        return next;
+      });
+    };
+
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
+          <span style={{ fontSize: 20 }}>⚙️</span>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Map Columns</p>
+            <p style={{ fontSize: 12, color: '#64748B' }}>
+              Select which column from your file corresponds to each CRM field. Unmapped columns will be ignored.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          {crmFields.map(field => {
+            const selectedExcelCol = Object.keys(mapping).find(k => mapping[k] === field.key) || '';
+            return (
+              <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {field.label}
+                  {field.req && <span style={{ color: '#ef4444' }}>*</span>}
+                </label>
+                <select
+                  value={selectedExcelCol}
+                  onChange={(e) => handleMap(field.key, e.target.value)}
+                  style={{
+                    padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1',
+                    fontSize: 13, color: '#0f172a', outline: 'none', background: '#fff'
+                  }}
+                >
+                  <option value="">-- Ignore (Do not map) --</option>
+                  {rawHeaders.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
 
   // ─── Step: Preview ────────────────────────────────────────────────────────────
   const renderPreview = () => (
@@ -235,10 +294,10 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
         <span style={{ fontSize: 20 }}>✅</span>
         <div>
-          <p style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>File parsed successfully!</p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>File mapped successfully!</p>
           <p style={{ fontSize: 12, color: '#059669' }}>
             <strong>{file?.name}</strong> — {totalRows} data rows found.
-            {totalRows > 2000 && <span style={{ color: '#ef4444' }}> ⚠️ Max 2000 rows allowed. Only first 2000 will be imported.</span>}
+            {totalRows > 2000 && <span style={{ color: '#ef4444' }}> ⚠️ Max 2000 rows allowed.</span>}
           </p>
         </div>
       </div>
@@ -309,7 +368,6 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
     const allOk = result.skipped === 0;
     return (
       <>
-        {/* Summary */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
           <div style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 14, padding: '20px 16px', textAlign: 'center' }}>
             <div style={{ fontSize: 36, fontWeight: 900, color: '#059669', lineHeight: 1 }}>{result.inserted}</div>
@@ -331,7 +389,6 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
           </div>
         )}
 
-        {/* Errors table */}
         {result.errors.length > 0 && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -387,15 +444,20 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
   // ─── Render ───────────────────────────────────────────────────────────────────
   const stepLabels: Record<Step, string> = {
     upload: '1. Select File',
-    preview: '2. Preview',
-    importing: '3. Importing',
-    result: '4. Done',
+    mapping: '2. Map Columns',
+    preview: '3. Preview',
+    importing: '4. Importing',
+    result: '5. Done',
   };
+
+  const hasRequiredFields = 
+    Object.values(mapping).includes('firstName') && 
+    Object.values(mapping).includes('lastName') && 
+    Object.values(mapping).includes('phone');
 
   return (
     <div style={s.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={s.modal}>
-        {/* Header */}
         <div style={s.hdr}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #2563EB, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
@@ -413,30 +475,28 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
           )}
         </div>
 
-        {/* Step indicator */}
-        <div style={{ padding: '12px 28px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ padding: '12px 28px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}>
           {(Object.keys(stepLabels) as Step[]).map((s_key, i, arr) => (
             <div key={s_key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: step === s_key ? '#2563EB' : (Object.keys(stepLabels).indexOf(step) > i ? '#ecfdf5' : '#e2e8f0'), color: step === s_key ? '#fff' : (Object.keys(stepLabels).indexOf(step) > i ? '#059669' : '#94a3b8') }}>
                   {Object.keys(stepLabels).indexOf(step) > i ? '✓' : i + 1}
                 </div>
-                <span style={{ fontSize: 12, fontWeight: step === s_key ? 700 : 500, color: step === s_key ? '#2563EB' : '#94a3b8' }}>{stepLabels[s_key]}</span>
+                <span style={{ fontSize: 12, fontWeight: step === s_key ? 700 : 500, color: step === s_key ? '#2563EB' : '#94a3b8', whiteSpace: 'nowrap' }}>{stepLabels[s_key]}</span>
               </div>
               {i < arr.length - 1 && <div style={{ width: 20, height: 1, background: '#e2e8f0' }} />}
             </div>
           ))}
         </div>
 
-        {/* Body */}
         <div style={s.body}>
           {step === 'upload' && renderUpload()}
+          {step === 'mapping' && renderMapping()}
           {step === 'preview' && renderPreview()}
           {step === 'importing' && renderImporting()}
           {step === 'result' && renderResult()}
         </div>
 
-        {/* Footer */}
         {step !== 'importing' && (
           <div style={s.ftr}>
             {step === 'upload' && (
@@ -447,10 +507,24 @@ export default function LeadImportModal({ onClose, onSuccess }: Props) {
                 <button onClick={onClose} style={s.btnGhost}>Cancel</button>
               </>
             )}
+            {step === 'mapping' && (
+              <>
+                <button onClick={() => { setStep('upload'); setFile(null); }} style={s.btnSecondary}>
+                  ← Change File
+                </button>
+                <button 
+                  onClick={goToPreview} 
+                  disabled={!hasRequiredFields}
+                  style={{ ...s.btnPrimary, opacity: hasRequiredFields ? 1 : 0.5, cursor: hasRequiredFields ? 'pointer' : 'not-allowed' }}
+                >
+                  Continue →
+                </button>
+              </>
+            )}
             {step === 'preview' && (
               <>
-                <button onClick={() => { setStep('upload'); setFile(null); setPreview([]); }} style={s.btnSecondary}>
-                  ← Change File
+                <button onClick={() => setStep('mapping')} style={s.btnSecondary}>
+                  ← Back to Mapping
                 </button>
                 <button onClick={handleImport} style={{ ...s.btnPrimary, display: 'flex', alignItems: 'center', gap: 8 }}>
                   🚀 Import {Math.min(totalRows, 2000)} Leads

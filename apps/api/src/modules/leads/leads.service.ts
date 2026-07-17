@@ -244,6 +244,7 @@ export class LeadsService {
     createdById: string,
     fileBuffer: Buffer,
     mimeType: string,
+    mappingStr?: string,
   ): Promise<ImportResult> {
     // Parse the workbook
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -281,12 +282,21 @@ export class LeadsService {
       'remarks': 'notes', 'comment': 'notes', 'comments': 'notes',
     };
 
+    const userMapping = mappingStr ? JSON.parse(mappingStr) : null;
+
     const normalise = (row: Record<string, unknown>): Record<string, string> => {
       const out: Record<string, string> = {};
       for (const [k, v] of Object.entries(row)) {
-        const key = k.trim().toLowerCase();
-        const mapped = alias[key] ?? key;
-        out[mapped] = String(v ?? '').trim();
+        if (userMapping) {
+          const mappedKey = userMapping[k];
+          if (mappedKey) {
+            out[mappedKey] = String(v ?? '').trim();
+          }
+        } else {
+          const key = k.trim().toLowerCase();
+          const mapped = alias[key] ?? key;
+          out[mapped] = String(v ?? '').trim();
+        }
       }
       return out;
     };
