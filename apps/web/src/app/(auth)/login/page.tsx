@@ -190,26 +190,7 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Demo credentials box */}
-            <div style={{ marginTop: '1.25rem', background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.3)', borderRadius: 12, padding: '12px 16px' }}>
-              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#93C5FD', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>🔑 Demo Credentials</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginBottom: 2 }}>📧 admin@realflow.com</p>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>🔒 Admin@123</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setValue('email', 'admin@realflow.com');
-                    setValue('password', 'Admin@123');
-                  }}
-                  style={{ padding: '6px 14px', background: 'rgba(37,99,235,0.4)', border: '1px solid rgba(37,99,235,0.5)', borderRadius: 8, color: '#93C5FD', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Auto-fill
-                </button>
-              </div>
-            </div>
+
 
             <p style={{ textAlign: 'center', marginTop: '1.25rem', color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>
               New to RealFlow?{' '}
