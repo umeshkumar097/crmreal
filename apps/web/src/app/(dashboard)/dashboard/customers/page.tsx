@@ -7,13 +7,14 @@ import api from '@/lib/api';
 
 interface Customer {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   email: string;
-  totalBookings: number;
-  totalPaid: number;
   status: 'ACTIVE' | 'INACTIVE' | 'VIP';
   createdAt: string;
+  _count?: { bookings: number };
+  bookings?: { totalAmount: number }[];
 }
 
 export default function CustomersPage() {
@@ -25,11 +26,13 @@ export default function CustomersPage() {
   });
 
   const customers: Customer[] = data?.data || [];
-  const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    (c.email || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = customers.filter(c => {
+    const fullName = `${c.firstName || ''} ${c.lastName || ''}`.trim().toLowerCase();
+    const searchLower = search.toLowerCase();
+    return fullName.includes(searchLower) ||
+      (c.phone || '').includes(search) ||
+      (c.email || '').toLowerCase().includes(searchLower);
+  });
 
   const totalCustomers = customers.length;
   const activeCount = customers.filter(c => c.status === 'ACTIVE').length;
@@ -124,7 +127,11 @@ export default function CustomersPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((c, i) => (
+                filtered.map((c, i) => {
+                  const fullName = `${c.firstName || ''} ${c.lastName || ''}`.trim();
+                  const totalBookings = c._count?.bookings || 0;
+                  const totalPaid = c.bookings?.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0) || 0;
+                  return (
                   <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -134,22 +141,23 @@ export default function CustomersPage() {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           color: '#fff', fontWeight: 600, fontSize: 14, flexShrink: 0
                         }}>
-                          {c.name?.[0]?.toUpperCase() || '?'}
+                          {fullName?.[0]?.toUpperCase() || '?'}
                         </div>
-                        <span style={{ fontWeight: 500, color: '#0F172A' }}>{c.name}</span>
+                        <span style={{ fontWeight: 500, color: '#0F172A' }}>{fullName}</span>
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px', color: '#475569', fontSize: 14 }}>{c.phone}</td>
                     <td style={{ padding: '14px 16px', color: '#475569', fontSize: 14 }}>{c.email || '—'}</td>
-                    <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: 500 }}>{c.totalBookings || 0}</td>
-                    <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: 600 }}>{formatCurrency(c.totalPaid)}</td>
+                    <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: 500 }}>{totalBookings}</td>
+                    <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: 600 }}>{formatCurrency(totalPaid)}</td>
                     <td style={{ padding: '14px 16px' }}>
                       <span style={{ ...statusColor(c.status), padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                         {c.status}
                       </span>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
